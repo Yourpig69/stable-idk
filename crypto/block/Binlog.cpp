@@ -23,6 +23,59 @@
 #include "td/utils/port/path.h"
 
 #include <sstream>
+#include <stdexcept>
+#include <iostream>  // Supponiamo che LOG e altre librerie necessarie siano incluse qui
+
+class BinlogError : public std::runtime_error {
+public:
+    BinlogError(const std::string& msg) : std::runtime_error(msg) {}
+};
+
+class InterpretError : public std::runtime_error {
+public:
+    InterpretError(const std::string& msg) : std::runtime_error(msg) {}
+};
+
+// Altri include e definizioni necessarie...
+
+namespace block {
+
+// Altri elementi del namespace...
+
+while (true) {
+    auto res = read_file();
+    if (res.is_error()) {
+        return res.move_as_error();
+    }
+    long long sz = res.move_as_ok();
+    total += sz;
+    try {
+        cptr = wptr;
+        log_cpos = log_wpos;
+        if (!log_rpos && rptr == start && wptr >= rptr + 4 && td::as<unsigned>(rptr) != 0x0442446b) {
+            throw BinlogError{"incorrect magic"};
+        }
+        int r = replay_pending(allow_partial || sz != 0);
+        if (r < 0 && r >= -0x40000000) {
+            throw InterpretError{(PSLICE() << "errore nel binlog " << r).c_str()};
+        }
+    } catch (const BinlogError& err) {
+        LOG(ERROR) << "errore durante la lettura del binlog " << binlog_name << ": " << err.what() << " alla posizione " << log_rpos;
+        return td::Status::Error(PSLICE() << "errore durante la lettura del binlog " << binlog_name << ": " << err.what() << " alla posizione "
+                                          << log_rpos);
+    } catch (const InterpretError& err) {
+        LOG(ERROR) << "errore nell'interpretazione del binlog " << binlog_name << ": " << err.what() << " alla posizione " << log_rpos;
+        return td::Status::Error(PSLICE() << "errore nell'interpretazione del binlog " << binlog_name << ": " << err.what()
+                                          << " alla posizione " << log_rpos);
+    }
+    if (!sz) {
+        break;
+    }
+};
+
+return total;
+
+}  // namespace block
 
 namespace block {
 /*
